@@ -1,28 +1,55 @@
-import { inject, Injectable } from '@angular/core';
+import { Injectable, Injector } from "@angular/core";
 import { CartService } from './cart.service';
 import { ProductsService } from '../products/products.service';
-import { Observable } from 'rxjs';
+import { EMPTY, Observable } from "rxjs";
 import { ProductCheckout } from '../products/product.interface';
-import { map } from 'rxjs/operators';
+import { map, switchMap } from 'rxjs/operators';
+import { environment } from "../../environments/environment";
+import { ApiService } from "../core/api.service";
 
 @Injectable({
   providedIn: 'root',
 })
-export class CheckoutService {
-  private readonly cartService = inject(CartService);
-  private readonly productsService = inject(ProductsService);
+export class CheckoutService extends ApiService {
+  constructor(
+    private readonly cartService: CartService,
+    private readonly productsService: ProductsService,
+    injector: Injector,
+  ) {
+    super(injector)
+  }
 
   getProductsForCheckout(): Observable<ProductCheckout[]> {
-    const cart = this.cartService.cart();
-
-    return this.productsService.getProductsForCheckout(Object.keys(cart)).pipe(
-      map((products) =>
-        products.map((product) => ({
-          ...product,
-          orderedCount: cart[product.id],
-          totalPrice: +(cart[product.id] * product.price).toFixed(2),
-        })),
-      ),
+    return this.cartService.cart$.pipe(
+      switchMap((cart) =>
+        this.productsService.getProductsForCheckout(Object.keys(cart)).pipe(
+          map((products) =>
+            products.map((product) => ({
+              ...product,
+              orderedCount: cart[product.id],
+              totalPrice: +(cart[product.id] * product.price).toFixed(2),
+            }))
+          )
+        )
+      )
     );
+  }
+
+  placeOrder({ products, totalPrice, totalInCart, shipping }: any): Observable<any> {
+
+    if (!this.endpointEnabled('order')) {
+      console.warn(
+        'Endpoint "order" is disabled. To enable change your environment.ts config'
+      );
+
+      return EMPTY;
+    }
+
+    return this.http.post(`${ environment.apiEndpoints.order }`, {
+      products,
+      totalPrice,
+      totalInCart,
+      shipping,
+    });
   }
 }

@@ -1,17 +1,15 @@
-import { Component, model, output } from '@angular/core';
-import { MatButton } from '@angular/material/button';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
   selector: 'app-file-picker',
   templateUrl: './file-picker.component.html',
   styleUrls: ['./file-picker.component.scss'],
-  standalone: true,
-  imports: [MatButton],
 })
 export class FilePickerComponent {
-  uploadClick = output();
+  @Input() file: File | null = null;
 
-  file = model<File>();
+  @Output() fileChange = new EventEmitter<File | null>();
+  @Output() uploadClick = new EventEmitter<void>();
 
   selectFile(files: FileList | null): void {
     if (!files?.length) {
@@ -26,10 +24,12 @@ export class FilePickerComponent {
       return;
     }
 
-    this.file.set(file);
+    this.fileChange.emit(file);
+    this.file = file;
   }
 
   removeFile(): void {
-    this.file.set(undefined);
+    this.file = null;
+    this.fileChange.emit(null);
   }
 }

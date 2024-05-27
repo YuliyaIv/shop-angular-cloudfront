@@ -1,144 +1,114 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
-  inject,
-  input,
+  OnDestroy,
   OnInit,
-  signal,
 } from '@angular/core';
 import {
   AbstractControl,
-  ReactiveFormsModule,
-  UntypedFormBuilder,
+  FormBuilder,
+  FormGroup,
   Validators,
 } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
-import { filter } from 'rxjs';
-import { finalize } from 'rxjs/operators';
+import { BehaviorSubject, Subject } from 'rxjs';
+import { finalize, takeUntil } from 'rxjs/operators';
 
 import { Product } from '../../products/product.interface';
 import { ProductsService } from '../../products/products.service';
 import { NotificationService } from '../../core/notification.service';
-import { MatProgressSpinner } from '@angular/material/progress-spinner';
-import { MatButton } from '@angular/material/button';
-import { MatInput } from '@angular/material/input';
-import { MatError, MatFormField, MatLabel } from '@angular/material/form-field';
-import {
-  MatCard,
-  MatCardActions,
-  MatCardContent,
-  MatCardTitle,
-} from '@angular/material/card';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'app-edit-product',
   templateUrl: './edit-product.component.html',
   styleUrls: ['./edit-product.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
-  imports: [
-    MatCard,
-    MatCardTitle,
-    MatCardContent,
-    ReactiveFormsModule,
-    MatFormField,
-    MatLabel,
-    MatInput,
-    MatError,
-    MatCardActions,
-    MatButton,
-    RouterLink,
-    MatProgressSpinner,
-  ],
 })
-export class EditProductComponent implements OnInit {
-  #destroyRef = inject(DestroyRef);
-
-  productId = input<string>();
-
-  form = this.fb.group({
-    title: ['', Validators.required],
-    description: ['', Validators.required],
-    price: ['', Validators.required],
-    count: ['', Validators.required],
-  });
-
+export class EditProductComponent implements OnInit, OnDestroy {
+  form: FormGroup;
+  productId: string | null = null;
   requestInProgress = false;
 
-  loaded = signal(false);
-
-  constructor(
-    private readonly activatedRoute: ActivatedRoute,
-    private readonly fb: UntypedFormBuilder,
-    private readonly notificationService: NotificationService,
-    private readonly productsService: ProductsService,
-    private readonly router: Router,
-  ) {}
+  loaded$ = new BehaviorSubject(false);
 
   get countCtrl(): AbstractControl {
     return this.form.get('count') as AbstractControl;
   }
-
   get descriptionCtrl(): AbstractControl {
     return this.form.get('description') as AbstractControl;
   }
-
   get priceCtrl(): AbstractControl {
     return this.form.get('price') as AbstractControl;
   }
-
   get titleCtrl(): AbstractControl {
     return this.form.get('title') as AbstractControl;
   }
 
+  private readonly onDestroy$: Subject<void> = new Subject();
+
+  constructor(
+    private readonly activatedRoute: ActivatedRoute,
+    private readonly fb: FormBuilder,
+    private readonly notificationService: NotificationService,
+    private readonly productsService: ProductsService,
+    private readonly router: Router
+  ) {
+    this.form = this.fb.group({
+      title: ['', Validators.required],
+      description: ['', Validators.required],
+      price: ['', Validators.required],
+      count: ['', Validators.required],
+    });
+  }
+
   ngOnInit(): void {
-    const productId = this.productId();
+    const productId = this.activatedRoute.snapshot.paramMap.get('productId');
 
     if (!productId) {
-      this.loaded.set(true);
+      this.loaded$.next(true);
       return;
     }
 
     this.productsService
       .getProductById(productId)
       .pipe(
-        finalize(() => this.loaded.set(true)),
-        filter(Boolean),
-        takeUntilDestroyed(this.#destroyRef),
+        finalize(() => this.loaded$.next(true)),
+        takeUntil(this.onDestroy$)
       )
       .subscribe((product) => {
-        this.form.patchValue(product);
+        if (product) {
+          this.form.patchValue(product);
+          this.productId = product.id;
+        }
       });
+  }
+
+  ngOnDestroy(): void {
+    this.onDestroy$.next();
+    this.onDestroy$.complete();
   }
 
   editProduct(): void {
     const product: Product = this.form.value;
-
     if (!product) {
       return;
     }
 
-    const productId = this.productId();
-
-    const observable = productId
-      ? this.productsService.editProduct(productId, product)
+    const editProduct$ = this.productId
+      ? this.productsService.editProduct(this.productId, product)
       : this.productsService.createNewProduct(product);
 
     this.requestInProgress = true;
-
-    observable.subscribe({
-      next: () =>
-        this.router.navigate(['../'], { relativeTo: this.activatedRoute }),
-      error: (error: unknown) => {
+    editProduct$.subscribe(
+      () => this.router.navigate(['../'], { relativeTo: this.activatedRoute }),
+      (error: unknown) => {
         console.warn(error);
         this.requestInProgress = false;
         this.notificationService.showError(
-          `Failed to ${this.productId() ? 'edit' : 'create'} product`,
+          `Failed to ${this.productId ? 'edit' : 'create'} product`
         );
-      },
-    });
+      }
+    );
   }
 }

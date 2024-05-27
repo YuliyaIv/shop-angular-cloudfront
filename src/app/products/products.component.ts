@@ -1,18 +1,19 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ProductsService } from './products.service';
-import { ProductItemComponent } from './product-item/product-item.component';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { Observable } from 'rxjs';
+import { Product } from './product.interface';
 
 @Component({
   selector: 'app-products',
   templateUrl: './products.component.html',
   styleUrls: ['./products.component.scss'],
-  standalone: true,
-  imports: [ProductItemComponent],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ProductsComponent {
-  products = toSignal(inject(ProductsService).getProducts(), {
-    initialValue: [],
-  });
+export class ProductsComponent implements OnInit {
+  readonly products$: Observable<
+    Product[]
+  > = this.productsService.getProducts();
+
+  constructor(private readonly productsService: ProductsService) {}
+
+  ngOnInit(): void {}
 }

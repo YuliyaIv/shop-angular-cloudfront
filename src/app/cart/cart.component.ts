@@ -1,26 +1,11 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-} from '@angular/core';
-import { UntypedFormBuilder, Validators } from '@angular/forms';
+import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
 import { CheckoutService } from './checkout.service';
+import { ProductCheckout } from '../products/product.interface';
+import { Observable, of } from "rxjs";
 import { CartService } from './cart.service';
-import { CartShippingFormComponent } from './cart-shipping-form/cart-shipping-form.component';
-import { MatButton } from '@angular/material/button';
-import { MatProgressSpinner } from '@angular/material/progress-spinner';
-import { OrderSummaryComponent } from './order-summary/order-summary.component';
-import {
-  MatStep,
-  MatStepper,
-  MatStepperNext,
-  MatStepperPrevious,
-} from '@angular/material/stepper';
-import { MatCard, MatCardContent, MatCardTitle } from '@angular/material/card';
-import { AsyncPipe } from '@angular/common';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { map, shareReplay, switchMap, take, tap, withLatestFrom } from "rxjs/operators";
 
 @Component({
   selector: 'app-cart',
@@ -32,48 +17,20 @@ import { toSignal } from '@angular/core/rxjs-interop';
       useValue: { displayDefaultIndicatorType: false },
     },
   ],
-  standalone: true,
-  imports: [
-    MatCard,
-    MatCardTitle,
-    MatCardContent,
-    MatStepper,
-    MatStep,
-    OrderSummaryComponent,
-    MatProgressSpinner,
-    MatButton,
-    MatStepperNext,
-    CartShippingFormComponent,
-    MatStepperPrevious,
-    AsyncPipe,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CartComponent {
-  private readonly fb = inject(UntypedFormBuilder);
-  private readonly checkoutService = inject(CheckoutService);
-  private readonly cartService = inject(CartService);
+export class CartComponent implements OnInit {
+  products$!: Observable<ProductCheckout[]>;
+  totalPrice$!: Observable<number>;
+  totalInCart$!: Observable<number>;
+  cartEmpty$!: Observable<boolean>;
 
-  products = toSignal(this.checkoutService.getProductsForCheckout(), {
-    initialValue: [],
-  });
+  shippingInfo!: FormGroup;
 
-  totalPrice = computed(() => {
-    const products = this.products();
-    const total = products.reduce((acc, val) => acc + val.totalPrice, 0);
-    return +total.toFixed(2);
-  });
-
-  cartNotEmpty = computed(() => {
-    return this.cartService.totalInCart() > 0;
-  });
-
-  shippingInfo = this.fb.group({
-    lastName: ['', Validators.required],
-    firstName: ['', Validators.required],
-    address: ['', Validators.required],
-    comment: '',
-  });
+  constructor(
+    private readonly fb: FormBuilder,
+    private readonly checkoutService: CheckoutService,
+    private readonly cartService: CartService,
+  ) {}
 
   get fullName(): string {
     const { firstName, lastName } = this.shippingInfo.value;
@@ -84,8 +41,43 @@ export class CartComponent {
     return this.shippingInfo.value.address;
   }
 
+  get email(): string {
+    return this.shippingInfo.value.email;
+  }
+
   get comment(): string {
     return this.shippingInfo.value.comment;
+  }
+
+  ngOnInit(): void {
+    this.shippingInfo = this.fb.group({
+      lastName: ['', Validators.required],
+      firstName: ['', Validators.required],
+      address: ['', Validators.required],
+      email: ['', Validators.required],
+      comment: '',
+    });
+
+    this.products$ = this.checkoutService.getProductsForCheckout().pipe(
+      shareReplay({
+        refCount: true,
+        bufferSize: 1,
+      })
+    );
+
+    this.totalPrice$ = this.products$.pipe(
+      map((products) => {
+        const total = products.reduce((acc, val) => acc + val.totalPrice, 0);
+        return +total.toFixed(2);
+      }),
+      shareReplay({
+        refCount: true,
+        bufferSize: 1,
+      })
+    );
+
+    this.totalInCart$ = this.cartService.totalInCart$;
+    this.cartEmpty$ = this.totalInCart$.pipe(map((count) => count > 0));
   }
 
   add(id: string): void {
@@ -94,5 +86,20 @@ export class CartComponent {
 
   remove(id: string): void {
     this.cartService.removeItem(id);
+  }
+
+  submit() {
+    this.products$.pipe(
+      take(1),
+      withLatestFrom(this.totalPrice$, this.totalInCart$, of(this.shippingInfo.value)),
+      switchMap(([ products, totalPrice, totalInCart, shipping ]) => this.checkoutService.placeOrder({
+          products,
+          totalPrice,
+          totalInCart,
+          shipping,
+        })),
+      // tap(() => this.cartService.empty()),
+      take(1),
+    ).subscribe();
   }
 }

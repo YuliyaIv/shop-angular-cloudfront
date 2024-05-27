@@ -1,10 +1,10 @@
 # Shop Angular Cloudfront
 
-Angular version: ~17.
+Angular version: ~12.
 
 Repo maintainers:
 
-- [Sergey Gultyayev](https://github.com/gultyayev)
+- [Sergey Gultyayev](https://github.com/gultyaev)
 
 ## The purpose
 
@@ -22,32 +22,10 @@ If you would like to help implementing some feature, you should ask the maintain
 
 ## Get up and running
 
-Prerequisites: NodeJS LTS v18.x and higher
+Prerequisites: NodeJS v14
 
 Follow the steps:
 
 - git clone
 - npm i
 - ng serve
-
-## Troubleshooting
-
-### Cannot commit
-
-Most likely you are getting a message
-
-> **Commit failed with error**
->
-> ...
->
-> ✖ subject may not be empty [subject-empty]
->
-> ✖ type may not be empty [type-empty]
->
-> ✖ found 2 problems, 0 warnings
->
-> ⓘ Get help: https://github.com/conventional-changelog/commitlint/#what-is-commitlint
->
-> husky - commit-msg script failed (code 1)
-
-To fix it you either need to follow conventional commit messages rules, or remove `.husky/pre-commit` file which enables the aforementioned rule.

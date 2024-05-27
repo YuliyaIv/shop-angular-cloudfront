@@ -8,7 +8,7 @@ describe('FilePickerComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [FilePickerComponent],
+      declarations: [FilePickerComponent],
     }).compileComponents();
   });
 
